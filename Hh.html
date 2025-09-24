@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>مواعيد المباريات</title>
+<style>
+:root {
+  --bg-dark: #121212;
+  --card-bg: #1e1e1e;
+  --text-primary: #e0e0e0;
+  --text-secondary: #a0a0a0;
+  --border-color: #2c2c2c;
+  --active-tab: #ff8f00;
+  --inactive-tab: #333;
+  --status-live: #d32f2f;
+  --status-not-started: #388e3c;
+  --status-finished: #616161;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: Arial, sans-serif;
+  background-color: var(--bg-dark);
+  color: var(--text-primary);
+  text-align: right;
+}
+
+#matches-container { max-width: 720px; margin: 15px auto; padding: 0 10px; }
+#matches-tabs { display: flex; justify-content: space-around; margin-bottom: 20px; background-color: var(--inactive-tab); border-radius: 8px; padding: 5px; }
+.tab-btn { flex: 1; margin: 0 4px; padding: 10px 0; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 16px; color: var(--text-primary); background-color: transparent; transition: 0.3s; }
+.tab-btn.active { background-color: var(--active-tab); color: #000; }
+
+.league-group { margin-bottom: 20px; }
+.league-name { font-size: 14px; color: var(--text-secondary); padding: 8px 12px; background-color: var(--card-bg); border-bottom: 1px solid var(--border-color); border-radius: 8px 8px 0 0; margin: 0; }
+
+.match-card { display: flex; align-items: center; justify-content: space-between; background-color: var(--card-bg); padding: 16px 12px; margin-bottom: 2px; }
+.league-group .match-card:last-child { border-radius: 0 0 8px 8px; margin-bottom: 0; }
+
+.team { display: flex; flex-direction: column; align-items: center; width: 35%; text-align: center; }
+.team-logo { width: 40px; height: 40px; object-fit: contain; margin-bottom: 8px; }
+.team-name { font-size: 16px; font-weight: 600; }
+
+.match-info { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.match-status { font-size: 11px; font-weight: bold; padding: 3px 10px; border-radius: 12px; color: #fff; }
+.status-finished { background-color: var(--status-finished); }
+.status-live { background-color: var(--status-live); }
+.status-not-started { background-color: var(--status-not-started); }
+
+.match-result { font-size: 22px; font-weight: bold; direction: ltr; }
+.match-time { font-size: 18px; font-weight: bold; }
+
+.loading, .no-matches { text-align: center; padding: 40px 20px; font-size: 16px; color: var(--text-secondary); }
+.loading { animation: pulse 1.5s infinite; }
+@keyframes pulse { 0% { opacity: 0.4; } 50% { opacity: 1; } 100% { opacity: 0.4; } }
+</style>
+</head>
+<body>
+<div id="matches-container">
+  <div id="matches-tabs"></div>
+  <div id="matches-content"></div>
+</div>
+
+<script>
+const apiUrl = 'https://script.google.com/macros/s/AKfycbztY2lOxLd34TpaRTT5gevxBkS2eylQvW8yHHqAfQ-KbdWr0qhkcrtAaxz6GdQtbXcj/exec';
+const leaguesList = ["esp.1","eng.1","ita.1","ger.1","fra.1","por.1","esp.cup","ita.cup","eng.fa","uefa.cl","afc.champions","fifa.world","egp.1","ksa.1","euro.1"];
+
+async function fetchMatches() {
+  const container = document.getElementById('matches-content');
+  container.innerHTML = "<div class='loading'>جارٍ تحميل المباريات...</div>";
+
+  try {
+    const res = await fetch(apiUrl);
+    const data = await res.json();
+
+    let tabsHtml = '';
+    let contentHtml = '';
+
+    leaguesList.forEach((league, idx) => {
+      if(!data[league] || !data[league].scoreboard || !data[league].scoreboard.events) return;
+
+      const leagueInfo = data[league].scoreboard.leagues[0];
+      tabsHtml += `<button class="tab-btn${idx===0?' active':''}" data-league="${league}">${leagueInfo.abbreviation || league}</button>`;
+
+      let leagueHtml = `<div class="day-container" id="day-${league}" style="display:${idx===0?'block':'none'}"><div class="league-group"><h3 class="league-name">${leagueInfo.name}</h3>`;
+
+      data[league].scoreboard.events.forEach(event => {
+        const comp = event.competitions[0];
+        const home = comp.competitors.find(t => t.homeAway==='home');
+        const away = comp.competitors.find(t => t.homeAway==='away');
+
+        let statusClass = 'status-not-started';
+        if(comp.status.type.state==='post') statusClass = 'status-finished';
+        else if(comp.status.type.state==='in') statusClass = 'status-live';
+
+        leagueHtml += `
+          <div class="match-card">
+            <div class="team">
+              <img class="team-logo" src="${home.team.logo}" alt="${home.team.displayName}">
+              <div class="team-name">${home.team.displayName}</div>
+            </div>
+            <div class="match-info">
+              <div class="match-status ${statusClass}">${comp.status.type.shortDetail || comp.status.type.description}</div>
+              <div class="match-result">${home.score || '-'} : ${away.score || '-'}</div>
+              <div class="match-time">${new Date(comp.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+            </div>
+            <div class="team">
+              <img class="team-logo" src="${away.team.logo}" alt="${away.team.displayName}">
+              <div class="team-name">${away.team.displayName}</div>
+            </div>
+          </div>
+        `;
+      });
+
+      leagueHtml += '</div></div>';
+      contentHtml += leagueHtml;
+    });
+
+    document.getElementById('matches-tabs').innerHTML = tabsHtml;
+    container.innerHTML = contentHtml;
+
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+        btn.classList.add('active');
+        document.querySelectorAll('.day-container').forEach(dc=>dc.style.display='none');
+        document.getElementById('day-'+btn.dataset.league).style.display='block';
+      });
+    });
+
+  } catch(e) {
+    container.innerHTML = "<div class='no-matches'>حدث خطأ أثناء تحميل المباريات</div>";
+    console.error(e);
+  }
+}
+
+fetchMatches();
+</script>
+</body>
+</html>
